@@ -1,7 +1,21 @@
 # brain-stroke-prediction
 📌 Problem Statement
+
 Stroke is one of the leading causes of death and disability worldwide. Early prediction can save lives. This project builds a classification model to predict whether a patient is at risk of a stroke based on medical and lifestyle features.
-The core challenge: the dataset is heavily imbalanced — very few positive stroke cases compared to non-stroke cases.
+
+The core challenge: the dataset is heavily imbalanced — only 783 stroke cases out of 43,400 total samples (less than 2%).
+
+
+📂 Dataset
+
+
+Source: Cerebral Stroke Prediction - Imbalanced Dataset (Kaggle)
+File: dataset.csv
+Shape: 43,400 rows × 12 columns
+Target column: stroke (0 = No Stroke, 1 = Stroke)
+Class imbalance: 42,617 No Stroke vs 783 Stroke
+
+
 
 🔧 Workflow
 
@@ -9,8 +23,8 @@ The core challenge: the dataset is heavily imbalanced — very few positive stro
 
 
 Loaded dataset using pandas
-Checked shape, data types, null values
-Explored class distribution — confirmed severe imbalance in stroke column
+Checked shape, data types, null values (bmi had 1,462 missing, smoking_status had 13,292)
+Confirmed severe class imbalance in stroke column
 
 
 2. Preprocessing
@@ -18,61 +32,67 @@ Explored class distribution — confirmed severe imbalance in stroke column
 
 Label Encoding of categorical columns using LabelEncoder
 Missing value imputation using column means
-Feature/Target split: X = all columns except stroke, y = stroke
+StandardScaler normalization applied to all features
 
 
-3. Handling Class Imbalance — SMOTE
+3. Handling Class Imbalance — Conditional GAN (cGAN)
+
+Instead of simple interpolation (SMOTE), a Conditional GAN was trained to learn the real statistical distribution of stroke patients and generate realistic synthetic minority samples.
 
 
-Applied SMOTE (Synthetic Minority Oversampling Technique) to balance the classes
-Visualized class distribution before and after SMOTE with bar charts
-Used PCA to create a 2D scatter plot of the resampled data
+Generator: noise + class label → synthetic feature vector
+Discriminator: feature vector + class label → real/fake score
+Trained for 300 epochs on minority class only
+Generated 41,834 synthetic stroke samples to perfectly balance the dataset
+Final balanced dataset: 85,234 samples (42,617 each class)
 
 
-4. Train-Test Split & Scaling
+4. Train / Val / Test Split
 
 
-80/20 stratified train-test split
-Applied StandardScaler to normalize features
+70% Train (61,580) | 15% Val (10,868) | 15% Test (12,786)
+Stratified split to maintain class balance
 
 
-5. Model Training & Comparison
+5. Hybrid Model — CNN + BiLSTM + Transformer
 
-Trained and evaluated 5 classification models:
+Input (B, 1, F)
+     │
+ CNN Block (local feature extraction, residual connections)
+     │
+ BiLSTM Block (2-layer bidirectional, sequential dependencies)
+     │
+ Transformer Encoder (multi-head self-attention, global context)
+     │
+ Classifier Head (Linear → GELU → Dropout → Linear)
+     │
+ Output: stroke probability
 
-Model                 Accuracy  F1 Score 
-Random Forest         95.79%    95.88%
-XGBoost               95.68%    95.70%
-Decision Tree         94.01%    94.10%
-SVM                   87.45%    88.04%
-Logistic Regression   82.36%    82.84%
+Total trainable parameters: 445,585
 
-Plotted a bar chart comparing Accuracy and F1 Score across all models.
+6. Training with Focal Loss
 
-6. Hyperparameter Tuning
+Focal Loss was used instead of standard BCE to focus the model on hard, rare stroke examples:
 
-
-Applied GridSearchCV on XGBoost to find the best combination of:
-
-n_estimators, max_depth, learning_rate, subsample
-
-
-
-Evaluated the tuned model's final Accuracy and F1 Score
+FL(p_t) = -α * (1 - p_t)^γ * log(p_t)
 
 
-7. Ensemble Methods
-
-Compared 4 ensemble strategies using the Top 3 models (Random Forest, XGBoost, Decision Tree):
-
-Ensemble MethodAccuracyF1 ScoreHard Voting--Soft Voting--Simple Averaging--Stacking (meta: Logistic Regression)--
-
-
-🏆 Key Findings
+alpha = 0.25, gamma = 2.0
+Optimizer: Adam (lr=1e-3, weight_decay=1e-4)
+Scheduler: CosineAnnealingLR over 50 epochs
+Best model saved based on validation F1 score
 
 
-Random Forest was the best single model with ~95.8% accuracy and F1 score
-SMOTE was critical — without it, models would have been biased toward the majority class
-Ensemble methods were explored to further push performance
 
+🏆 Final Results
+
+Metric    Score
+Accuracy  98.96%
+F1 Score  98.95%
+ROC-AUC   99.71%
+
+
+Train and Val loss converged together (no overfitting)
+Val F1 stable at ~0.99 from early epochs
+Final Train Loss: 0.0028 | Val Loss: 0.0028
 
